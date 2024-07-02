@@ -16,9 +16,9 @@ module Fixed_Point_Unit
     output reg [WIDTH - 1 : 0] result,
     output reg ready
 );
-
     // Result calculation based on the operation
     always @(*)
+
     begin
         case (operation)
             `FPU_ADD    : begin result <= operand_1 + operand_2; ready <= 1; end
@@ -40,45 +40,57 @@ module Fixed_Point_Unit
     // ------------------- //
     reg [WIDTH - 1 : 0] root;
     reg root_ready;
-    reg [WIDTH*2-1 : 0] radicand;
-    reg [WIDTH-1 : 0] root_candidate;
-    reg [WIDTH*2-1 : 0] remainder;
-    reg [WIDTH-1 : 0] root_shift;
-    reg [5:0] bit_position;
+    reg [2*WIDTH - 1 : 0] x; // Input number (extended precision)
+    reg [WIDTH - 1 : 0] q; // Current result
+    reg [2*WIDTH + 1 : 0] m; // Bitmask
+    reg [2*WIDTH + 1 : 0] y; // Temporary calculation variable
+
+    localparam IDLE = 2'd0,
+               CALCULATE = 2'd1,
+               DONE = 2'd2;
+
+    reg [1:0] sqrt_state;
 
     always @(posedge clk or posedge reset) begin
         if (reset) begin
-            root <= 0;
+            sqrt_state <= IDLE;
             root_ready <= 0;
-            radicand <= 0;
-            root_candidate <= 0;
-            remainder <= 0;
-            root_shift <= 0;
-            bit_position <= 0;
+            root <= 0;
+            x <= 0;
+            q <= 0;
+            m <= 0;
+            y <= 0;
         end else if (operation == `FPU_SQRT) begin
-            radicand <= operand_1 << FBITS;
-            root_candidate <= 0;
-            remainder <= 0;
-            root_shift <= 1 << (WIDTH - 2);
-            bit_position <= WIDTH - 1;
-            root_ready <= 0;
-            root <= 0;
-
-            while (root_shift != 0) begin
-                remainder = remainder - (root_candidate << 1 | root_shift);
-                root_candidate = root_candidate << 1 | 1;
-
-                if (remainder < 0) begin
-                    remainder = remainder + (root_candidate << 1 | root_shift);
-                    root_candidate = root_candidate - 1;
+            case (sqrt_state)
+                IDLE: begin
+                    x <= {operand_1, {WIDTH{1'b0}}}; // Shift left to account for fixed-point
+                    m <= 1 << (2*WIDTH - 2);
+                    y <= 0;
+                    q <= 0;
+                    sqrt_state <= CALCULATE;
+                    root_ready <= 0;
                 end
-
-                root_shift = root_shift >> 2;
-                bit_position = bit_position - 2;
-            end
-
-            root <= root_candidate;
-            root_ready <= 1;
+                CALCULATE: begin
+                    if (m != 0) begin
+                        if (y < x) begin
+                            q <= q | (m >> (WIDTH - 1));
+                            y <= y + m + (q << (WIDTH - 1));
+                        end else begin
+                            y <= y - (q << (WIDTH - 1));
+                            q <= q >> 1;
+                        end
+                        m <= m >> 2;
+                    end else begin
+                        sqrt_state <= DONE;
+                    end
+                end
+                DONE: begin
+                    root <= q;
+                    root_ready <= 1;
+                    sqrt_state <= IDLE;
+                end
+                default: sqrt_state <= IDLE;
+            endcase
         end
     end
 
@@ -160,6 +172,7 @@ module Multiplier
     output reg [31:0] product
 );
     always @(*)
+
     begin
         product = operand_1 * operand_2;
     end
