@@ -1,5 +1,7 @@
 Name:Mohammadreza_Validokht_Asl_400414111
+
 Name:Mohammadreza_Nazari_400413404
+
 Date : 07/03/2024
 # Computer Organization - Spring 2024
 # Iran Univeristy of Science and Technology
