@@ -1,243 +1,138 @@
-Certainly! Below is a comprehensive README for your GitHub repository that addresses all the questions and details your project.
+Name:Mohammadreza_Validokht_Asl_400414111
+Name:Mohammadreza_Nazari_400413404
+Date : 07/03/2024
+# Computer Organization - Spring 2024
+# Iran Univeristy of Science and Technology
+![alt text](800px-IUST_logo_solid_black.svg.png)
 
----
+# Fixed Point Unit README
 
-# Fixed-Point Arithmetic Unit with Multiplier and Square Root Calculation
+## Overview
+This repository contains the implementation of a Fixed Point Unit (FPU) designed for performing basic arithmetic operations including addition, subtraction, multiplication, and square root calculation on fixed-point numbers. The module is implemented in Verilog and includes a testbench for simulation.
 
-This repository contains the implementation of a Fixed-Point Arithmetic Unit (FPU) in Verilog, a testbench for verification, and an example assembly code to demonstrate its use. The FPU supports addition, subtraction, multiplication, and square root operations on fixed-point numbers.
+## File Structure
+- `Fixed_Point_Unit.v`: The main Verilog module implementing the Fixed Point Unit.
+- `Fixed_Point_Unit_Testbench.v`: Testbench for simulating and verifying the Fixed Point Unit.
+- `Assembly.s`: Assembly code used for testing the FPU.
+- `Assembly.txt`: Corresponding machine code for `Assembly.s`.
+- `Defines.vh`: Header file containing operation definitions.
+- `waveform.vcd`: Waveform file generated from the simulation (to be created).
 
-## Project Structure
-
-- `Fixed_Point_Unit.v`: Verilog module implementing the FPU with addition, subtraction, multiplication, and square root operations.
-- `Fixed_Point_Unit_Testbench.v`: Testbench for verifying the FPU functionality.
-- `Assembly.s`: Example assembly code demonstrating the usage of the FPU.
-- `Assembly.txt`: Machine code corresponding to the assembly code.
-- `Defines.vh`: Contains macro definitions used in the Verilog code.
-
-## Modules and Implementation Details
-
-### Fixed_Point_Unit
-
-#### Bit Selection for Multiplication Result
-
-The result of the multiplication operation in the `Fixed_Point_Unit` is selected as follows:
-
+## Bit Selection for Multiplication Result
+In the `Fixed_Point_Unit` module, the multiplication result is selected using:
 ```verilog
-`FPU_MUL    : begin result <= mult_result[WIDTH + FBITS - 1 : FBITS]; ready <= mult_ready; end
+result <= product[WIDTH + FBITS - 1 : FBITS];
 ```
+This selection extracts the significant bits from the product by shifting out the fractional bits. Here, `WIDTH` is the bit width of the operands, and `FBITS` is the number of fractional bits. This ensures the fixed-point representation is maintained by discarding the lower bits which represent values smaller than the least significant bit of the result.
 
-Here, `WIDTH` is the bit-width of the operands, and `FBITS` is the number of fractional bits in the fixed-point representation. The multiplication of two `WIDTH`-bit fixed-point numbers results in a product of `2*WIDTH` bits. To maintain the fixed-point format, the result is shifted right by `FBITS` bits.
+## Implementation of the 32-bit Multiplier
+### Partial Product Generation
+The 32-bit multiplier is implemented using a 16-bit multiplier module. The multiplication process is broken into smaller parts:
+1. **Partial Products**:
+   - `P1`: Lower 16 bits of both operands (`A1 * B1`).
+   - `P2`: Upper 16 bits of operand 1 and lower 16 bits of operand 2 (`A2 * B1`).
+   - `P3`: Lower 16 bits of operand 1 and upper 16 bits of operand 2 (`A1 * B2`).
+   - `P4`: Upper 16 bits of both operands (`A2 * B2`).
 
-#### 32-bit Multiplier Implementation
-
-The 32-bit multiplier is implemented using four instances of a 16-bit multiplier. The partial products are generated and combined to produce the final result. 
-
-- **Partial Product Generation**:
-  - Step 1: Multiply lower 16 bits of both operands.
-  - Step 2: Multiply upper 16 bits of operand 1 with lower 16 bits of operand 2.
-  - Step 3: Multiply lower 16 bits of operand 1 with upper 16 bits of operand 2.
-  - Step 4: Multiply upper 16 bits of both operands.
-
-- **Final Addition**:
-  - The partial products are shifted appropriately and added together to produce the final 32-bit result.
-
+### Final Addition
+The partial products are shifted appropriately and added together:
 ```verilog
-always @(posedge clk or posedge reset)
-begin
-    if (reset) begin
-        mult_state <= 0;
-        mult_ready <= 0;
-        mult_result <= 0;
-        partial_product_1 <= 0;
-        partial_product_2 <= 0;
-        partial_product_3 <= 0;
-        partial_product_4 <= 0;
-        mult_op1 <= 0;
-        mult_op2 <= 0;
-    end
-    else if (operation == `FPU_MUL) begin
-        case (mult_state)
-            0: begin
-                mult_op1 <= operand_1[15:0];
-                mult_op2 <= operand_2[15:0];
-                mult_state <= 1;
-            end
-            1: begin
-                partial_product_1 <= mult_intermediate;
-                mult_op1 <= operand_1[31:16];
-                mult_op2 <= operand_2[15:0];
-                mult_state <= 2;
-            end
-            2: begin
-                partial_product_2 <= mult_intermediate << 16;
-                mult_op1 <= operand_1[15:0];
-                mult_op2 <= operand_2[31:16];
-                mult_state <= 3;
-            end
-            3: begin
-                partial_product_3 <= mult_intermediate << 16;
-                mult_op1 <= operand_1[31:16];
-                mult_op2 <= operand_2[31:16];
-                mult_state <= 4;
-            end
-            4: begin
-                partial_product_4 <= mult_intermediate << 32;
-                mult_state <= 5;
-            end
-            5: begin
-                mult_result <= partial_product_1 + partial_product_2 + partial_product_3 + partial_product_4;
-                mult_ready <= 1;
-                mult_state <= 0;
-            end
-            default: mult_state <= 0;
-        endcase
-    end
-end
+product <= P1 + (P2 << 16) + (P3 << 16) + (P4 << 32);
 ```
+This combination of partial products yields the final 64-bit product result.
 
+## Implementation of the Square Root Calculator
+### Algorithm
+![alt text](The-classifier-Algorithmic-State-Machine-ASM-Chart-1.png)
+The square root calculator uses an iterative method similar to the non-restoring square root algorithm:
+1. **Initialization**: Start with the operand and initialize variables.
+2. **Iterative Calculation**:
+   - Perform test subtraction.
+   - Update remainder and accumulator based on the test result.
+   - Shift and adjust the quotient.
+3. **Completion**: After the required iterations, the quotient holds the square root result.
+
+### Fixed-Point Handling
+The algorithm considers fixed-point representation by shifting bits appropriately to handle fractional parts during iterations.
+
+## Analysis of `Assembly.s`
+### Sections and Purpose
+1. **Initialization**:
+   ```assembly
+   li sp, 0x3C00       # Load immediate value 0x3C00 into stack pointer
+   addi gp, sp, 392    # Set global pointer to sp + 392
+   ```
+
+2. **Main Loop**:
+   ```assembly
+   loop:
+   flw f1, 0(sp)       # Load floating point word from memory at sp to f1
+   flw f2, 4(sp)       # Load floating point word from memory at sp + 4 to f2
+   fmul.s f10, f1, f1  # Multiply f1 by itself, store result in f10
+   fmul.s f20, f2, f2  # Multiply f2 by itself, store result in f20
+   fadd.s f30, f10, f20# Add f10 and f20, store result in f30
+   fsqrt.s x3, f30     # Calculate square root of f30, store result in f3
+   fadd.s f0, f0, f3   # Add f3 to f0
+   addi sp, sp, 8      # Increment stack pointer by 8
+   blt sp, gp, loop    # Loop if sp < gp
+   ebreak              # End of program
+   ```
+
+### Value Loading
+- Values are loaded from the memory location pointed to by the stack pointer (`sp`).
+
+### Calculation Steps
+1. Load two values into `f1` and `f2`.
+2. Perform multiplication to obtain squares of `f1` and `f2`.
+3. Sum the squares and compute the square root.
+4. Accumulate the result in `f0`.
+
+### Final Result Register
+- The final result of the accumulated distances is stored in the `f0` register.
+
+## Waveform Analysis
+(To be added with actual waveform images and explanation.)
+
+## Detailed Explanation of Modules
 ### Square Root Calculator
-
-The square root calculation is performed using a digit-by-digit method, which iteratively finds the digits of the square root. 
-
-#### Implementation
-
-- **Initialization**:
-  - Extend the precision of the input number by shifting left by `FBITS * 2`.
-  - Initialize the bitmask and other variables.
-
-- **Calculation**:
-  - For each bit position, update the temporary calculation variable `y` and the current result `q`.
-  - Check if the temporary variable `y` is less than the input number and update `q` and `y` accordingly.
-
-- **Completion**:
-  - The final value of `q` after all iterations is the square root of the input number.
-
-```verilog
-always @(posedge clk or posedge reset) begin
-    if (reset) begin
-        sqrt_state <= IDLE;
-        root_ready <= 0;
-        root <= 0;
-        x <= 0;
-        q <= 0;
-        m <= 0;
-        y <= 0;
-    end else if (operation == `FPU_SQRT) begin
-        case (sqrt_state)
-            IDLE: begin
-                x <= {operand_1, {WIDTH{1'b0}}}; // Shift left to account for fixed-point
-                m <= 1 << (2*WIDTH - 2);
-                y <= 0;
-                q <= 0;
-                sqrt_state <= CALCULATE;
-                root_ready <= 0;
-            end
-            CALCULATE: begin
-                if (m != 0) begin
-                    if (y < x) begin
-                        q <= q | (m >> (WIDTH - 1));
-                        y <= y + m + (q << (WIDTH - 1));
-                    end else begin
-                        y <= y - (q << (WIDTH - 1));
-                        q <= q >> 1;
-                    end
-                    m <= m >> 2;
-                end else begin
-                    sqrt_state <= DONE;
-                end
-            end
-            DONE: begin
-                root <= q;
-                root_ready <= 1;
-                sqrt_state <= IDLE;
-            end
-            default: sqrt_state <= IDLE;
-        endcase
-    end
-end
-```
-
-## Assembly Code
-
-The provided assembly code demonstrates the usage of the FPU for calculating the Euclidean distance between two points. 
-
-### Explanation
-
-- **Initialization**:
-  - Set up the stack pointer and global pointer.
-
-- **Main Loop**:
-  - Load floating-point values into registers `f1` and `f2`.
-  - Calculate the square of each value.
-  - Add the squares.
-  - Compute the square root of the sum.
-  - Accumulate the result.
-
-- **Exit**:
-  - Break the loop and end the program.
-
-### Detailed Steps
-
-```assembly
-main:
-    li          sp,     0x3C00       # Initialize stack pointer
-    addi        gp,     sp,     392  # Initialize global pointer
-
-loop:
-    flw         f1,     0(sp)        # Load value into f1
-    flw         f2,     4(sp)        # Load value into f2
-    
-    fmul.s      f10,    f1,     f1   # f10 = f1 * f1
-    fmul.s      f20,    f2,     f2   # f20 = f2 * f2
-    fadd.s      f30,    f10,    f20  # f30 = f10 + f20
-    
-    fsqrt.s     x3,     f30          # Calculate square root of f30
-    fadd.s      f0,     f0,     f3   # Accumulate result in f0
-
-    addi        sp,     sp,     8    # Increment stack pointer
-    blt         sp,     gp,     loop # Loop back if not done
-
-    ebreak                        # End program
-```
-
-### Registers
-
-- **Final Result**:
-  - The final result of the accumulated distance is stored in the floating-point register `f0`.
-
-## Simulation Waveforms
-
-**Insert Waveform Images Here**
-
-Provide images of the simulation waveforms, highlighting the correct execution of each operation and the final result in the register.
-
-## Detailed Explanation
-
-### Square Root Calculator
-
-- The square root calculator uses an iterative method to compute the square root, handling fixed-point numbers by extending the precision and iteratively refining the result.
+- **States**: `SQRT_IDLE`, `SQRT_START`, `SQRT_CALC`, `SQRT_DONE`.
+- **Logic**: Uses iterative subtraction and shifting to compute the square root.
+- **Fixed-Point Handling**: Shifts operands to manage fractional parts.
 
 ### Multiplier
+- **Partial Product Generation**: Utilizes a 16-bit multiplier for generating four partial products.
+- **Final Addition**: Combines partial products with appropriate shifts to form the final 64-bit result.
 
-- The 32-bit multiplier is implemented using four 16-bit multipliers. Partial products are generated and combined to form the final result, ensuring correct fixed-point arithmetic.
-
-## Bonus: Multiplier Pipelining
-
-**If implemented, describe the pipelining approach and its performance benefits here.**
-
+## Bonus Point Task: Pipelining the Multiplier (If Implemented)
 ### Approach
-
-- The multiplier was modified to use pipelining, breaking down the computation into multiple stages and allowing multiple operations to be processed simultaneously.
-
-### Performance Improvement
-
-- Pipelining improves performance by increasing throughput, enabling the unit to handle more operations in a given time frame.
-
-## Conclusion
-
-This project demonstrates the implementation of a fixed-point arithmetic unit with support for addition, subtraction, multiplication, and square root operations. The provided testbench and assembly code validate the functionality and demonstrate the usage of the unit. The detailed explanation and simulation waveforms ensure a clear understanding of the implementation.
+- **Pipelining Stages**: Split the multiplication process into stages to overlap execution.
+- **Performance Improvement**: Reduces overall latency by processing multiple multiplication steps concurrently.
 
 ---
 
-Feel free to customize and expand this README based on your specific requirements and results.
+This README provides an overview, detailed explanations, and analysis of the provided code and its functionality.
 
+
+# Pictures of waveform in GKTWAVE
+## Initial 
+![alt text](<Initial in decimal.png>)
+## Sum in Decimal
+![alt text](<Add in decimal.png>)
+## Sub in Decimal
+![alt text](<Sub in Decimal.png>)
+## Mul in Decimal
+![alt text](<Mul in Decimal.png>)
+## specify 
+![alt text](specify.png)
+### The Reason that we use Specify 
+Unlike other operations, in the case of squaring, the floating point must be modified, and this modification is specified based on our Qi.f.
+## sqrt in Decimal
+![alt text](<sqrt in Decimal-1.png>)
+## Sum in Hex
+![alt text](<sum in hex.png>)
+## Sub in Hex
+![alt text](<sub in hex.png>)
+## Mul in Hex
+![alt text](<mul in hex.png>)
+## sqrt in Hex
+![alt text](<sqrt in hex.png>)
