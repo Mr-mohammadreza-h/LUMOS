@@ -44,6 +44,7 @@ This combination of partial products yields the final 64-bit product result.
 ## Implementation of the Square Root Calculator
 ### Algorithm
 ![alt text](The-classifier-Algorithmic-State-Machine-ASM-Chart-1.png)
+
 The square root calculator uses an iterative method similar to the non-restoring square root algorithm:
 1. **Initialization**: Start with the operand and initialize variables.
 2. **Iterative Calculation**:
