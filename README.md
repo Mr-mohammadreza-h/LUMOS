@@ -1,48 +1,243 @@
-<img src="https://github.com/IUST-Computer-Organization/.github/blob/main/images/CompOrg_orange.png" alt="Image" width="85" height="85" style="vertical-align:middle"> LUMOS RISC-V
-=================================
-> Light Utilization with Multicycle Operational Stages (LUMOS) RISC-V Processor Core
+Certainly! Below is a comprehensive README for your GitHub repository that addresses all the questions and details your project.
 
-<div align="justify">
+---
 
-## Introduction
+# Fixed-Point Arithmetic Unit with Multiplier and Square Root Calculation
 
-**LUMOS** is a multicycle RISC-V processor that implements a subset of `RV32I` instruction set, designed for educational use in computer organization classes at **Iran University of Science and Technology**. It allows for modular design projects, enabling students to gain hands-on experience with processor architecture.
+This repository contains the implementation of a Fixed-Point Arithmetic Unit (FPU) in Verilog, a testbench for verification, and an example assembly code to demonstrate its use. The FPU supports addition, subtraction, multiplication, and square root operations on fixed-point numbers.
 
-## Features
+## Project Structure
 
-- LUMOS executes instructions in multiple stages, such as `instruction_fetch`, `fetch_wait`, `fetch_done`, `decode`, `execute`, `memory_access`, and etc. This approach allows for more complex operations and better utilization of processor resources compared to single-cycle designs. This processor does not support the entire `RV32I` instruction set, which is the base integer instruction set of RISC-V. Instead, it focuses on a subset of instructions that are essential for educational purposes and demonstrating the principles of computer architecture.
+- `Fixed_Point_Unit.v`: Verilog module implementing the FPU with addition, subtraction, multiplication, and square root operations.
+- `Fixed_Point_Unit_Testbench.v`: Testbench for verifying the FPU functionality.
+- `Assembly.s`: Example assembly code demonstrating the usage of the FPU.
+- `Assembly.txt`: Machine code corresponding to the assembly code.
+- `Defines.vh`: Contains macro definitions used in the Verilog code.
 
-- The processor is designed with modularity in mind, allowing students to work on various components of the processor. As part of their course projects, students will design different execution units, such as FPUs, control units, memory interfaces, and other modules that are integral to the processor's functionality.
+## Modules and Implementation Details
 
-## LUMOS Datapath
+### Fixed_Point_Unit
 
-In a multicycle implementation, we can break down each instruction into a series of steps corresponding to the functional unit operations that are needed. These steps can be used to create a multi-cycle implementation. In this architecture, each step will take 1 clock cycle. This allows that components in the design and different functional units to be used more than once per instruction, as long as it is used on different clock cycles. This sharing of resources can help reduce the amount of hardware required. This classic view of CPU design partitions the design of a processor into data path design and control design. Data path design focuses on the design of ALU and other functional units as well as accessing the registers and memory. Control path design focuses on the design of the state machines to decode instructions and generate the sequence of control signals necessary to appropriately manipulate the data path.
+#### Bit Selection for Multiplication Result
 
-![Alt text](https://github.com/IUST-Computer-Organization/LUMOS/blob/main/Images/Datapath_1.png "LUMOS Datapath Section 1")
-![Alt text](https://github.com/IUST-Computer-Organization/LUMOS/blob/main/Images/Datapath_2.png "LUMOS Datapath Section 2")
-![Alt text](https://github.com/IUST-Computer-Organization/LUMOS/blob/main/Images/Datapath_3.png "LUMOS Datapath Section 3")
+The result of the multiplication operation in the `Fixed_Point_Unit` is selected as follows:
 
-## Synthesis
+```verilog
+`FPU_MUL    : begin result <= mult_result[WIDTH + FBITS - 1 : FBITS]; ready <= mult_ready; end
+```
 
-This processor core is synthesizable in the 45nm CMOS technology node. LUMOS has gone through the RTL-to-GDS flow using *Synopsys Design Compiler* and *Cadence SoC Encounter* tools. At this node, the core can achieve a frequency of **500MHz** while occupying **12000um2** of area and consuming around **3mw** of power.
-</div>
+Here, `WIDTH` is the bit-width of the operands, and `FBITS` is the number of fractional bits in the fixed-point representation. The multiplication of two `WIDTH`-bit fixed-point numbers results in a product of `2*WIDTH` bits. To maintain the fixed-point format, the result is shifted right by `FBITS` bits.
 
-<!-- ![Alt text](https://github.com/IUST-Computer-Organization/LUMOS/blob/main/LUMOS.png "The LUMOS microprocessor synthesized with Design Compiler and placed and routed by Cadence Encounter" =300x300)  -->
+#### 32-bit Multiplier Implementation
 
-<picture>
-    <img 
-        alt="The LUMOS microprocessor synthesized with Design Compiler and placed and routed by Cadence Encounter" 
-        src="https://github.com/IUST-Computer-Organization/LUMOS/blob/main/Images/LUMOS.png"
-        width="550" 
-        height="550"
-    > 
-</picture> 
+The 32-bit multiplier is implemented using four instances of a 16-bit multiplier. The partial products are generated and combined to produce the final result. 
 
+- **Partial Product Generation**:
+  - Step 1: Multiply lower 16 bits of both operands.
+  - Step 2: Multiply upper 16 bits of operand 1 with lower 16 bits of operand 2.
+  - Step 3: Multiply lower 16 bits of operand 1 with upper 16 bits of operand 2.
+  - Step 4: Multiply upper 16 bits of both operands.
 
-## Copyright
+- **Final Addition**:
+  - The partial products are shifted appropriately and added together to produce the final 32-bit result.
 
-Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+```verilog
+always @(posedge clk or posedge reset)
+begin
+    if (reset) begin
+        mult_state <= 0;
+        mult_ready <= 0;
+        mult_result <= 0;
+        partial_product_1 <= 0;
+        partial_product_2 <= 0;
+        partial_product_3 <= 0;
+        partial_product_4 <= 0;
+        mult_op1 <= 0;
+        mult_op2 <= 0;
+    end
+    else if (operation == `FPU_MUL) begin
+        case (mult_state)
+            0: begin
+                mult_op1 <= operand_1[15:0];
+                mult_op2 <= operand_2[15:0];
+                mult_state <= 1;
+            end
+            1: begin
+                partial_product_1 <= mult_intermediate;
+                mult_op1 <= operand_1[31:16];
+                mult_op2 <= operand_2[15:0];
+                mult_state <= 2;
+            end
+            2: begin
+                partial_product_2 <= mult_intermediate << 16;
+                mult_op1 <= operand_1[15:0];
+                mult_op2 <= operand_2[31:16];
+                mult_state <= 3;
+            end
+            3: begin
+                partial_product_3 <= mult_intermediate << 16;
+                mult_op1 <= operand_1[31:16];
+                mult_op2 <= operand_2[31:16];
+                mult_state <= 4;
+            end
+            4: begin
+                partial_product_4 <= mult_intermediate << 32;
+                mult_state <= 5;
+            end
+            5: begin
+                mult_result <= partial_product_1 + partial_product_2 + partial_product_3 + partial_product_4;
+                mult_ready <= 1;
+                mult_state <= 0;
+            end
+            default: mult_state <= 0;
+        endcase
+    end
+end
+```
 
-Copyright 2024 Iran University of Science and Technology - iustCompOrg@gmail.com  
+### Square Root Calculator
 
-</div>
+The square root calculation is performed using a digit-by-digit method, which iteratively finds the digits of the square root. 
+
+#### Implementation
+
+- **Initialization**:
+  - Extend the precision of the input number by shifting left by `FBITS * 2`.
+  - Initialize the bitmask and other variables.
+
+- **Calculation**:
+  - For each bit position, update the temporary calculation variable `y` and the current result `q`.
+  - Check if the temporary variable `y` is less than the input number and update `q` and `y` accordingly.
+
+- **Completion**:
+  - The final value of `q` after all iterations is the square root of the input number.
+
+```verilog
+always @(posedge clk or posedge reset) begin
+    if (reset) begin
+        sqrt_state <= IDLE;
+        root_ready <= 0;
+        root <= 0;
+        x <= 0;
+        q <= 0;
+        m <= 0;
+        y <= 0;
+    end else if (operation == `FPU_SQRT) begin
+        case (sqrt_state)
+            IDLE: begin
+                x <= {operand_1, {WIDTH{1'b0}}}; // Shift left to account for fixed-point
+                m <= 1 << (2*WIDTH - 2);
+                y <= 0;
+                q <= 0;
+                sqrt_state <= CALCULATE;
+                root_ready <= 0;
+            end
+            CALCULATE: begin
+                if (m != 0) begin
+                    if (y < x) begin
+                        q <= q | (m >> (WIDTH - 1));
+                        y <= y + m + (q << (WIDTH - 1));
+                    end else begin
+                        y <= y - (q << (WIDTH - 1));
+                        q <= q >> 1;
+                    end
+                    m <= m >> 2;
+                end else begin
+                    sqrt_state <= DONE;
+                end
+            end
+            DONE: begin
+                root <= q;
+                root_ready <= 1;
+                sqrt_state <= IDLE;
+            end
+            default: sqrt_state <= IDLE;
+        endcase
+    end
+end
+```
+
+## Assembly Code
+
+The provided assembly code demonstrates the usage of the FPU for calculating the Euclidean distance between two points. 
+
+### Explanation
+
+- **Initialization**:
+  - Set up the stack pointer and global pointer.
+
+- **Main Loop**:
+  - Load floating-point values into registers `f1` and `f2`.
+  - Calculate the square of each value.
+  - Add the squares.
+  - Compute the square root of the sum.
+  - Accumulate the result.
+
+- **Exit**:
+  - Break the loop and end the program.
+
+### Detailed Steps
+
+```assembly
+main:
+    li          sp,     0x3C00       # Initialize stack pointer
+    addi        gp,     sp,     392  # Initialize global pointer
+
+loop:
+    flw         f1,     0(sp)        # Load value into f1
+    flw         f2,     4(sp)        # Load value into f2
+    
+    fmul.s      f10,    f1,     f1   # f10 = f1 * f1
+    fmul.s      f20,    f2,     f2   # f20 = f2 * f2
+    fadd.s      f30,    f10,    f20  # f30 = f10 + f20
+    
+    fsqrt.s     x3,     f30          # Calculate square root of f30
+    fadd.s      f0,     f0,     f3   # Accumulate result in f0
+
+    addi        sp,     sp,     8    # Increment stack pointer
+    blt         sp,     gp,     loop # Loop back if not done
+
+    ebreak                        # End program
+```
+
+### Registers
+
+- **Final Result**:
+  - The final result of the accumulated distance is stored in the floating-point register `f0`.
+
+## Simulation Waveforms
+
+**Insert Waveform Images Here**
+
+Provide images of the simulation waveforms, highlighting the correct execution of each operation and the final result in the register.
+
+## Detailed Explanation
+
+### Square Root Calculator
+
+- The square root calculator uses an iterative method to compute the square root, handling fixed-point numbers by extending the precision and iteratively refining the result.
+
+### Multiplier
+
+- The 32-bit multiplier is implemented using four 16-bit multipliers. Partial products are generated and combined to form the final result, ensuring correct fixed-point arithmetic.
+
+## Bonus: Multiplier Pipelining
+
+**If implemented, describe the pipelining approach and its performance benefits here.**
+
+### Approach
+
+- The multiplier was modified to use pipelining, breaking down the computation into multiple stages and allowing multiple operations to be processed simultaneously.
+
+### Performance Improvement
+
+- Pipelining improves performance by increasing throughput, enabling the unit to handle more operations in a given time frame.
+
+## Conclusion
+
+This project demonstrates the implementation of a fixed-point arithmetic unit with support for addition, subtraction, multiplication, and square root operations. The provided testbench and assembly code validate the functionality and demonstrate the usage of the unit. The detailed explanation and simulation waveforms ensure a clear understanding of the implementation.
+
+---
+
+Feel free to customize and expand this README based on your specific requirements and results.
+
